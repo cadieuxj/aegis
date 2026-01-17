@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd aegis-viral-engine && npm install && npm run build",
+  "outputDirectory": "aegis-viral-engine/.next",
+  "installCommand": "cd aegis-viral-engine && npm install",
+  "framework": "nextjs"
+}
