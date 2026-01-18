@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listPosts, loadPost, updatePostContent, updatePostStatus } from '@/lib/engine';
+import type { PostStatus } from '@/types';
 import { logActivity } from '@/lib/activity';
 
 export async function GET(request: NextRequest) {
@@ -66,7 +67,7 @@ export async function PATCH(request: NextRequest) {
   try {
     body = await request.json();
     const postId = typeof body?.postId === 'string' ? body.postId : null;
-    const status = body?.status as string | undefined;
+    const status = body?.status as PostStatus | undefined;
     const script = body?.script as
       | { id?: string; sections?: unknown; fullText?: string }
       | undefined;
