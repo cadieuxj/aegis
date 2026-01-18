@@ -23,7 +23,7 @@ import { Button, MotionButton } from '@/components/ui/button';
 import { Textarea, Label } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { Post, VisualAsset, TikTokScript, ScriptSection } from '@/types';
+import { Post, VisualAsset, ScriptSection } from '@/types';
 
 interface PostEditorProps {
   postId?: string;
@@ -34,6 +34,7 @@ export function PostEditor({ postId }: PostEditorProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'script' | 'audio' | 'visuals'>('script');
+  const [error, setError] = useState<string | null>(null);
 
   // Script editing state
   const [hookText, setHookText] = useState('');
@@ -59,32 +60,50 @@ export function PostEditor({ postId }: PostEditorProps) {
   }, [postId]);
 
   const fetchPost = async (id: string) => {
+    setError(null);
     try {
       const response = await fetch(`/api/posts?id=${id}`);
       const data = await response.json();
 
+      if (!response.ok) {
+        setError(data.error || 'Failed to load post');
+        return;
+      }
+
       if (data.success && data.post) {
         setPost(data.post);
         initializeFromPost(data.post);
+      } else {
+        setError('Post not found');
       }
     } catch (error) {
       console.error('Error fetching post:', error);
+      setError('Failed to load post');
     } finally {
       setLoading(false);
     }
   };
 
   const fetchLatestPost = async () => {
+    setError(null);
     try {
       const response = await fetch('/api/posts?limit=1');
       const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'Failed to load posts');
+        return;
+      }
 
       if (data.success && data.posts?.length > 0) {
         await fetchPost(data.posts[0].id);
         return;
       }
+
+      setError('No posts available');
     } catch (error) {
       console.error('Error fetching latest post:', error);
+      setError('Failed to load posts');
     } finally {
       setLoading(false);
     }
@@ -108,6 +127,7 @@ export function PostEditor({ postId }: PostEditorProps) {
 
     setSaving(true);
     try {
+      setError(null);
       const sections: ScriptSection[] = [
         { type: 'hook', startTime: 0, endTime: 3, text: hookText },
         { type: 'unlock', startTime: 3, endTime: 30, text: unlockText },
@@ -151,6 +171,7 @@ export function PostEditor({ postId }: PostEditorProps) {
       setIsEditing(false);
     } catch (error) {
       console.error('Error saving:', error);
+      setError(error instanceof Error ? error.message : 'Failed to save post');
     } finally {
       setSaving(false);
     }
@@ -197,7 +218,7 @@ export function PostEditor({ postId }: PostEditorProps) {
     return (
       <Card variant="bordered" className="text-center py-12">
         <FileText className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-        <p className="text-slate-400">No post selected</p>
+        <p className="text-slate-400">{error || 'No post selected'}</p>
         <p className="text-sm text-slate-500 mt-1">
           Generate content first or select a post to edit
         </p>

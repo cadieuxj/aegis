@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listPosts, loadPost, updatePostContent, updatePostStatus } from '@/lib/engine';
+import { logActivity } from '@/lib/activity';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,15 +12,35 @@ export async function GET(request: NextRequest) {
     if (postId) {
       const post = await loadPost(postId);
       if (!post) {
+        await logActivity({
+          eventType: 'post.load_failed',
+          entityType: 'post',
+          entityId: postId,
+          status: 'error',
+          message: 'Post not found',
+        });
         return NextResponse.json(
           { success: false, error: 'Post not found' },
           { status: 404 }
         );
       }
+      await logActivity({
+        eventType: 'post.loaded',
+        entityType: 'post',
+        entityId: postId,
+      });
       return NextResponse.json({ success: true, post });
     }
 
     const posts = await listPosts(status || undefined, limit);
+    await logActivity({
+      eventType: 'post.listed',
+      entityType: 'post',
+      metadata: {
+        status: status || 'all',
+        count: posts.length,
+      },
+    });
 
     return NextResponse.json({
       success: true,
@@ -28,6 +49,11 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Posts API error:', error);
+    await logActivity({
+      eventType: 'post.listed',
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Failed to fetch posts',
+    });
     return NextResponse.json(
       { success: false, error: 'Failed to fetch posts' },
       { status: 500 }
@@ -36,8 +62,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  let body: Record<string, unknown> | null = null;
   try {
-    const body = await request.json();
+    body = await request.json();
     const { postId, status, script, visuals } = body;
 
     if (!postId) {
@@ -74,6 +101,13 @@ export async function PATCH(request: NextRequest) {
     });
   } catch (error) {
     console.error('Posts API error:', error);
+    await logActivity({
+      eventType: 'post.updated',
+      entityType: 'post',
+      entityId: typeof body?.postId === 'string' ? body.postId : null,
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Failed to update post',
+    });
     return NextResponse.json(
       { success: false, error: 'Failed to update post' },
       { status: 500 }

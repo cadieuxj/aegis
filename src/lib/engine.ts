@@ -210,6 +210,13 @@ export async function loadPost(postId: string): Promise<Post | null> {
     .single();
 
   if (error || !postData) {
+    await logActivity({
+      eventType: 'post.load_failed',
+      entityType: 'post',
+      entityId: postId,
+      status: 'error',
+      message: error?.message || 'Post not found',
+    });
     return null;
   }
 
@@ -217,25 +224,43 @@ export async function loadPost(postId: string): Promise<Post | null> {
     ? postData.scripts[0]
     : postData.scripts;
 
-  if (!scriptData) {
-    return null;
+  let resolvedScript = scriptData;
+  if (!resolvedScript) {
+    const { data: scriptRow, error: scriptError } = await supabaseAdmin
+      .from('scripts')
+      .select('*')
+      .eq('id', postData.script_id)
+      .single();
+
+    if (scriptError || !scriptRow) {
+      await logActivity({
+        eventType: 'post.load_failed',
+        entityType: 'post',
+        entityId: postId,
+        status: 'error',
+        message: scriptError?.message || 'Script not found',
+      });
+      return null;
+    }
+
+    resolvedScript = scriptRow;
   }
 
-  return {
+  const loadedPost: Post = {
     id: postData.id,
     scriptId: postData.script_id,
     script: {
-      id: scriptData.id,
+      id: resolvedScript.id,
       researchSummaryId: '',
-      title: scriptData.title,
-      hookType: scriptData.hook_type as HookType,
-      sections: scriptData.sections,
-      fullText: scriptData.full_text,
-      targetAudience: scriptData.target_audience,
-      estimatedDuration: scriptData.estimated_duration,
-      visualThemes: scriptData.visual_themes,
-      createdAt: scriptData.created_at,
-      updatedAt: scriptData.updated_at,
+      title: resolvedScript.title,
+      hookType: resolvedScript.hook_type as HookType,
+      sections: resolvedScript.sections,
+      fullText: resolvedScript.full_text,
+      targetAudience: resolvedScript.target_audience,
+      estimatedDuration: resolvedScript.estimated_duration,
+      visualThemes: resolvedScript.visual_themes,
+      createdAt: resolvedScript.created_at,
+      updatedAt: resolvedScript.updated_at,
     },
     audioAsset: postData.audio_assets?.[0]
       ? {
@@ -267,6 +292,14 @@ export async function loadPost(postId: string): Promise<Post | null> {
     createdAt: postData.created_at,
     updatedAt: postData.updated_at,
   };
+
+  await logActivity({
+    eventType: 'post.loaded',
+    entityType: 'post',
+    entityId: postId,
+  });
+
+  return loadedPost;
 }
 
 export async function listPosts(
