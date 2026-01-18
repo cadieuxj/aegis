@@ -14,6 +14,8 @@ import {
   Bug,
   Video,
   Database,
+  Palette,
+  LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -25,6 +27,7 @@ const navigation = [
   { name: 'TikTok', href: '/tiktok', icon: Video },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Database', href: '/database', icon: Database },
+  { name: 'Brand Logo', href: '/brand/logo', icon: Palette },
   { name: 'Settings', href: '/settings', icon: Settings },
   { name: 'Debug', href: '/debug', icon: Bug },
 ];
@@ -92,7 +95,7 @@ export function Sidebar() {
         </nav>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-800/50">
+        <div className="px-6 py-4 border-t border-slate-800/50 space-y-3">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500" />
             <div className="flex-1 min-w-0">
@@ -102,6 +105,16 @@ export function Sidebar() {
               <p className="text-xs text-slate-500">Ethical AI Mode</p>
             </div>
           </div>
+          <button
+            onClick={async () => {
+              await fetch('/api/auth/logout', { method: 'POST' });
+              window.location.href = '/login';
+            }}
+            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign Out
+          </button>
         </div>
       </div>
     </motion.aside>
