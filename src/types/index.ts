@@ -131,3 +131,13 @@ export interface GenerationProgress {
   progress: number;
   message: string;
 }
+
+export interface TikTokConnection {
+  openId: string;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  scopes?: string[];
+  expiresAt?: string;
+  refreshExpiresAt?: string | null;
+  updatedAt?: string;
+}

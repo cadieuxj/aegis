@@ -55,9 +55,9 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-2">
-            <Label>OpenAI API Key (DALL-E 3)</Label>
+            <Label>Replicate API Token (FLUX)</Label>
             <div className="flex gap-2">
-              <Input type="password" placeholder="sk-xxxxxxxxxxxxxxxx" className="flex-1" />
+              <Input type="password" placeholder="r8_XXXXXXXXXXXXXXXXXXXXXXXX" className="flex-1" />
               <Badge variant="success">Connected</Badge>
             </div>
           </div>

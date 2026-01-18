@@ -1,8 +1,10 @@
-import OpenAI from 'openai';
 import { VisualAsset, TikTokScript, VisualStyle } from '@/types';
 import { generateId } from './utils';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+const REPLICATE_API_URL = 'https://api.replicate.com/v1';
+const DEFAULT_REPLICATE_MODEL = 'black-forest-labs/flux-schnell';
+const DEFAULT_REPLICATE_MIN_INTERVAL_MS = 11000;
+let lastReplicateRequestAt = 0;
 
 // Visual style presets for consistent aesthetic
 export const VISUAL_STYLE_CONFIGS: Record<VisualStyle, {
@@ -45,22 +47,10 @@ export async function generateVisualAsset(
 ): Promise<VisualAsset> {
   const styleConfig = VISUAL_STYLE_CONFIGS[style];
 
-  const prompt = buildDallEPrompt(theme, styleConfig);
+  const prompt = buildFluxPrompt(theme, styleConfig);
 
   try {
-    const response = await openai.images.generate({
-      model: 'dall-e-3',
-      prompt,
-      n: 1,
-      size: '1792x1024', // 16:9 aspect ratio for video
-      quality: 'hd',
-      style: 'vivid',
-    });
-
-    const imageUrl = response.data?.[0]?.url;
-    if (!imageUrl) {
-      throw new Error('No image URL returned from DALL-E');
-    }
+    const imageUrl = await generateWithReplicate(prompt, styleConfig.negativeElements);
 
     return {
       id: generateId(),
@@ -78,7 +68,7 @@ export async function generateVisualAsset(
   }
 }
 
-function buildDallEPrompt(theme: string, styleConfig: typeof VISUAL_STYLE_CONFIGS[VisualStyle]): string {
+function buildFluxPrompt(theme: string, styleConfig: typeof VISUAL_STYLE_CONFIGS[VisualStyle]): string {
   return `Cinematic, ultra-high quality digital art. ${styleConfig.basePrompt}.
 
 Scene concept: ${theme}
@@ -93,6 +83,151 @@ Style requirements:
 - Photorealistic with subtle artistic abstraction
 
 IMPORTANT: Absolutely no ${styleConfig.negativeElements}. The image must be clean and text-free.`;
+}
+
+interface ReplicatePredictionResponse {
+  id: string;
+  status: 'starting' | 'processing' | 'succeeded' | 'failed' | 'canceled';
+  output?: string[] | string | null;
+  error?: string | null;
+  urls?: {
+    get?: string;
+  };
+}
+
+async function generateWithReplicate(prompt: string, negativePrompt: string): Promise<string> {
+  const apiToken = process.env.REPLICATE_API_TOKEN;
+  if (!apiToken || apiToken === 'your_replicate_api_token_here') {
+    throw new Error('Replicate API key not configured. Add REPLICATE_API_TOKEN to .env.local');
+  }
+
+  const model = process.env.REPLICATE_MODEL || DEFAULT_REPLICATE_MODEL;
+  const startData = await createReplicatePrediction(apiToken, model, prompt, negativePrompt);
+  const predictionUrl = startData.urls?.get || `${REPLICATE_API_URL}/predictions/${startData.id}`;
+  const finalData = await pollReplicatePrediction(predictionUrl, apiToken);
+  const output = finalData.output;
+  const imageUrl = Array.isArray(output) ? output[0] : output;
+
+  if (!imageUrl || typeof imageUrl !== 'string') {
+    throw new Error('No image URL returned from Replicate');
+  }
+
+  return imageUrl;
+}
+
+async function createReplicatePrediction(
+  apiToken: string,
+  model: string,
+  prompt: string,
+  negativePrompt: string
+): Promise<ReplicatePredictionResponse> {
+  const maxAttempts = 3;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await enforceReplicateInterval();
+    const startResponse = await fetch(`${REPLICATE_API_URL}/models/${model}/predictions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Token ${apiToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        input: {
+          prompt,
+          negative_prompt: negativePrompt,
+          aspect_ratio: '16:9',
+          num_outputs: 1,
+          output_format: 'png',
+          output_quality: 85,
+        },
+      }),
+    });
+
+    if (startResponse.ok) {
+      return await startResponse.json() as ReplicatePredictionResponse;
+    }
+
+    if (startResponse.status === 429 && attempt < maxAttempts - 1) {
+      const retryAfterMs = await getRetryAfterMs(startResponse);
+      await sleep(retryAfterMs);
+      continue;
+    }
+
+    const message = await startResponse.text();
+    throw new Error(`Replicate request failed: ${startResponse.status} ${message}`);
+  }
+
+  throw new Error('Replicate request failed after retries');
+}
+
+async function pollReplicatePrediction(url: string, apiToken: string): Promise<ReplicatePredictionResponse> {
+  const maxAttempts = 30;
+  const delayMs = 2000;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Token ${apiToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 429 && attempt < maxAttempts - 1) {
+        const retryAfterMs = await getRetryAfterMs(response);
+        await sleep(retryAfterMs);
+        continue;
+      }
+      const message = await response.text();
+      throw new Error(`Replicate status failed: ${response.status} ${message}`);
+    }
+
+    const data = await response.json() as ReplicatePredictionResponse;
+    if (data.status === 'succeeded') {
+      return data;
+    }
+    if (data.status === 'failed' || data.status === 'canceled') {
+      throw new Error(data.error || 'Replicate prediction failed');
+    }
+
+    await sleep(delayMs);
+  }
+
+  throw new Error('Replicate prediction timed out');
+}
+
+async function enforceReplicateInterval() {
+  const minIntervalMs = Number(process.env.REPLICATE_MIN_INTERVAL_MS || DEFAULT_REPLICATE_MIN_INTERVAL_MS);
+  const now = Date.now();
+  const elapsed = now - lastReplicateRequestAt;
+  if (elapsed < minIntervalMs) {
+    await sleep(minIntervalMs - elapsed);
+  }
+  lastReplicateRequestAt = Date.now();
+}
+
+async function getRetryAfterMs(response: Response): Promise<number> {
+  const headerRetry = response.headers.get('retry-after');
+  if (headerRetry) {
+    const seconds = Number(headerRetry);
+    if (!Number.isNaN(seconds)) {
+      return Math.max(seconds * 1000, 1000);
+    }
+  }
+
+  try {
+    const data = await response.clone().json() as { retry_after?: number };
+    if (typeof data?.retry_after === 'number') {
+      return Math.max(data.retry_after * 1000, 1000);
+    }
+  } catch {
+    // ignore parse errors
+  }
+
+  return 6000;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function generateVisualSequence(
@@ -114,7 +249,7 @@ export async function generateVisualSequence(
 
     // Small delay between requests to respect rate limits
     if (i < themes.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await sleep(1000);
     }
   }
 

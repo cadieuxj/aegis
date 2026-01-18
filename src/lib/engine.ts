@@ -76,7 +76,7 @@ export async function generateViralContent(
   updateProgress('audio', 100, 'Voiceover generated successfully');
 
   // Step 4: Visual Generation
-  updateProgress('visuals', 0, 'Generating visuals with DALL-E 3...');
+  updateProgress('visuals', 0, 'Generating visuals with FLUX...');
 
   const visualStyle = config.visualStyle || recommendVisualStyle(script.fullText);
   const visualAssets = await generateVisualSequence(script, visualStyle);

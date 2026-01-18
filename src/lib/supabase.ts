@@ -99,6 +99,22 @@ export const supabaseAdmin = createClient(
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );
 
+  -- TikTok Connections Table
+  CREATE TABLE tiktok_connections (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    open_id TEXT NOT NULL,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
+    scopes TEXT[] NOT NULL DEFAULT '{}',
+    expires_at TIMESTAMPTZ NOT NULL,
+    refresh_expires_at TIMESTAMPTZ,
+    display_name TEXT,
+    avatar_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(open_id)
+  );
+
   -- Engagement Metrics Table
   CREATE TABLE engagement_metrics (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -128,6 +144,7 @@ export const supabaseAdmin = createClient(
   -- Create indexes for performance
   CREATE INDEX idx_posts_status ON posts(status);
   CREATE INDEX idx_posts_created_at ON posts(created_at DESC);
+  CREATE INDEX idx_tiktok_connections_open_id ON tiktok_connections(open_id);
   CREATE INDEX idx_engagement_metrics_post_id ON engagement_metrics(post_id);
   CREATE INDEX idx_scripts_hook_type ON scripts(hook_type);
   CREATE INDEX idx_research_sources_credibility ON research_sources(credibility_score DESC);
@@ -139,6 +156,7 @@ export const supabaseAdmin = createClient(
   ALTER TABLE audio_assets ENABLE ROW LEVEL SECURITY;
   ALTER TABLE visual_assets ENABLE ROW LEVEL SECURITY;
   ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tiktok_connections ENABLE ROW LEVEL SECURITY;
   ALTER TABLE engagement_metrics ENABLE ROW LEVEL SECURITY;
   ALTER TABLE iteration_recommendations ENABLE ROW LEVEL SECURITY;
 
@@ -149,6 +167,7 @@ export const supabaseAdmin = createClient(
   CREATE POLICY "Allow all" ON audio_assets FOR ALL USING (true);
   CREATE POLICY "Allow all" ON visual_assets FOR ALL USING (true);
   CREATE POLICY "Allow all" ON posts FOR ALL USING (true);
+  CREATE POLICY "Allow all" ON tiktok_connections FOR ALL USING (true);
   CREATE POLICY "Allow all" ON engagement_metrics FOR ALL USING (true);
   CREATE POLICY "Allow all" ON iteration_recommendations FOR ALL USING (true);
 
@@ -168,5 +187,9 @@ export const supabaseAdmin = createClient(
 
   CREATE TRIGGER update_posts_updated_at
     BEFORE UPDATE ON posts
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+  CREATE TRIGGER update_tiktok_connections_updated_at
+    BEFORE UPDATE ON tiktok_connections
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 */

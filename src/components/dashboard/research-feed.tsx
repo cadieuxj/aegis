@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ExternalLink, RefreshCw, BookOpen, Award, Clock } from 'lucide-react';
+import { ExternalLink, RefreshCw, BookOpen, Award, Clock, AlertCircle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Button, MotionButton } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -19,9 +19,11 @@ export function ResearchFeed({ onSelectSource }: ResearchFeedProps) {
   const [loading, setLoading] = useState(false);
   const [searchTopic, setSearchTopic] = useState('');
   const [currentTopic, setCurrentTopic] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const fetchResearch = async (topic?: string) => {
     setLoading(true);
+    setError(null);
     try {
       const url = topic
         ? `/api/research?topic=${encodeURIComponent(topic)}&academicOnly=true`
@@ -29,12 +31,19 @@ export function ResearchFeed({ onSelectSource }: ResearchFeedProps) {
       const response = await fetch(url);
       const data = await response.json();
 
+      console.log('Research API response:', data);
+
       if (data.success) {
-        setSources(data.sources);
-        setCurrentTopic(data.topic);
+        setSources(data.sources || []);
+        setCurrentTopic(data.topic || topic || 'Unknown');
+      } else {
+        setError(data.error || 'Failed to fetch research');
+        setSources([]);
       }
-    } catch (error) {
-      console.error('Error fetching research:', error);
+    } catch (err) {
+      console.error('Error fetching research:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch research');
+      setSources([]);
     } finally {
       setLoading(false);
     }
@@ -49,13 +58,6 @@ export function ResearchFeed({ onSelectSource }: ResearchFeedProps) {
     if (searchTopic.trim()) {
       fetchResearch(searchTopic);
     }
-  };
-
-  const getCredibilityBadge = (score: number) => {
-    if (score >= 80) return { variant: 'success' as const, label: 'High Credibility' };
-    if (score >= 60) return { variant: 'info' as const, label: 'Good Credibility' };
-    if (score >= 40) return { variant: 'warning' as const, label: 'Moderate' };
-    return { variant: 'default' as const, label: 'Review Needed' };
   };
 
   return (
@@ -99,6 +101,12 @@ export function ResearchFeed({ onSelectSource }: ResearchFeedProps) {
             <p className="mt-3 text-sm text-slate-400">
               Current topic: <span className="text-cyan-400">{currentTopic}</span>
             </p>
+          )}
+          {error && (
+            <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center gap-2 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
           )}
         </CardContent>
       </Card>

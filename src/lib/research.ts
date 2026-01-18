@@ -40,20 +40,94 @@ interface FirecrawlSearchResult {
   description?: string;
 }
 
+interface FirecrawlDocumentLike {
+  markdown?: string;
+  summary?: string;
+  metadata?: {
+    url?: string;
+    title?: string;
+    description?: string;
+    ogTitle?: string;
+    ogDescription?: string;
+  };
+}
+
+type FirecrawlSearchPayload =
+  | { data?: unknown[] }
+  | { web?: unknown[]; news?: unknown[]; images?: unknown[] }
+  | unknown[];
+
+function normalizeSearchResults(payload: FirecrawlSearchPayload): FirecrawlSearchResult[] {
+  if (!payload) {
+    return [];
+  }
+
+  const toResult = (item: unknown): FirecrawlSearchResult | null => {
+    if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    const raw = item as Partial<FirecrawlSearchResult> & FirecrawlDocumentLike & {
+      url?: string;
+      title?: string;
+      description?: string;
+    };
+    const metadata = raw.metadata ?? {};
+    const url = raw.url ?? metadata.url;
+    if (!url) {
+      return null;
+    }
+
+    const title = raw.title ?? metadata.title ?? metadata.ogTitle ?? url;
+    const description = raw.description ?? metadata.description ?? metadata.ogDescription ?? raw.summary;
+    const markdown = raw.markdown;
+
+    return {
+      url,
+      title,
+      description,
+      markdown,
+    };
+  };
+
+  const collectFromArray = (items: unknown[] | undefined): FirecrawlSearchResult[] => {
+    if (!items?.length) {
+      return [];
+    }
+    return items
+      .map(toResult)
+      .filter((value): value is FirecrawlSearchResult => Boolean(value));
+  };
+
+  if (Array.isArray(payload)) {
+    return collectFromArray(payload);
+  }
+
+  const typedPayload = payload as { data?: unknown[]; web?: unknown[]; news?: unknown[]; images?: unknown[] };
+
+  if (typedPayload.data) {
+    return collectFromArray(typedPayload.data);
+  }
+
+  return [
+    ...collectFromArray(typedPayload.web),
+    ...collectFromArray(typedPayload.news),
+    ...collectFromArray(typedPayload.images),
+  ];
+}
+
 export async function searchResearch(topic: string): Promise<ResearchSource[]> {
   try {
     const searchResult = await firecrawl.search(topic, {
-      limit: 10,
-      scrapeOptions: { formats: ['markdown'] },
-    }) as { success?: boolean; data?: FirecrawlSearchResult[] } | FirecrawlSearchResult[];
+      limit: 5, // Reduced to conserve API credits
+      categories: ['research'],
+      timeout: 30000,
+    }) as FirecrawlSearchPayload;
 
-    // Handle both response formats
-    const results = Array.isArray(searchResult)
-      ? searchResult
-      : (searchResult as { data?: FirecrawlSearchResult[] }).data;
+    const results = normalizeSearchResults(searchResult);
 
     if (!results || results.length === 0) {
-      console.error('Firecrawl search returned no results');
+      console.log('[Research] Firecrawl search returned no results for:', topic);
       return [];
     }
 
@@ -78,8 +152,14 @@ export async function searchResearch(topic: string): Promise<ResearchSource[]> {
       const bIsAcademic = isAcademicSource(b.url) ? 20 : 0;
       return (b.credibilityScore + bIsAcademic) - (a.credibilityScore + aIsAcademic);
     });
-  } catch (error) {
-    console.error('Error searching research:', error);
+  } catch (error: unknown) {
+    // Check for insufficient credits error
+    const err = error as { status?: number; code?: string; message?: string };
+    if (err.status === 402 || err.code === 'ERR_BAD_REQUEST') {
+      console.error('[Research] Firecrawl credits exhausted:', err.message);
+      throw new Error('Firecrawl API credits exhausted. Please upgrade your plan or wait for credits to reset.');
+    }
+    console.error('[Research] Error searching:', error);
     throw new Error('Failed to search for research');
   }
 }

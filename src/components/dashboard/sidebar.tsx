@@ -11,6 +11,9 @@ import {
   Settings,
   Zap,
   Home,
+  Bug,
+  Video,
+  Database,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -19,8 +22,11 @@ const navigation = [
   { name: 'Research Feed', href: '/research', icon: Search },
   { name: 'Generate Content', href: '/generate', icon: Sparkles },
   { name: 'Post Editor', href: '/editor', icon: FileText },
+  { name: 'TikTok', href: '/tiktok', icon: Video },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Database', href: '/database', icon: Database },
   { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Debug', href: '/debug', icon: Bug },
 ];
 
 export function Sidebar() {

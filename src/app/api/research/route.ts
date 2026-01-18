@@ -2,17 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import { searchResearch, RESEARCH_TOPICS, filterAcademicSources } from '@/lib/research';
 
 export async function GET(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams;
-    const topic = searchParams.get('topic');
-    const academicOnly = searchParams.get('academicOnly') === 'true';
+  const searchParams = request.nextUrl.searchParams;
+  const topic = searchParams.get('topic');
+  const academicOnly = searchParams.get('academicOnly') === 'true';
 
+  // Check if Firecrawl API key is configured
+  if (!process.env.FIRECRAWL_API_KEY || process.env.FIRECRAWL_API_KEY === 'your_firecrawl_api_key_here') {
+    return NextResponse.json({
+      success: false,
+      error: 'Firecrawl API key not configured. Add FIRECRAWL_API_KEY to .env.local',
+      topic: null,
+      sources: [],
+      count: 0,
+    });
+  }
+
+  try {
     const searchTopic = topic || RESEARCH_TOPICS[Math.floor(Math.random() * RESEARCH_TOPICS.length)];
+
+    console.log(`[Research API] Searching for: "${searchTopic}"`);
 
     let sources = await searchResearch(searchTopic);
 
-    if (academicOnly) {
+    console.log(`[Research API] Found ${sources.length} sources before filtering`);
+
+    if (academicOnly && sources.length > 0) {
       sources = filterAcademicSources(sources);
+      console.log(`[Research API] ${sources.length} sources after academic filter`);
     }
 
     return NextResponse.json({
@@ -22,15 +38,26 @@ export async function GET(request: NextRequest) {
       count: sources.length,
     });
   } catch (error) {
-    console.error('Research API error:', error);
+    console.error('[Research API] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch research';
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch research' },
+      { success: false, error: errorMessage, topic: null, sources: [], count: 0 },
       { status: 500 }
     );
   }
 }
 
 export async function POST(request: NextRequest) {
+  // Check if Firecrawl API key is configured
+  if (!process.env.FIRECRAWL_API_KEY || process.env.FIRECRAWL_API_KEY === 'your_firecrawl_api_key_here') {
+    return NextResponse.json({
+      success: false,
+      error: 'Firecrawl API key not configured',
+      sources: [],
+      count: 0,
+    });
+  }
+
   try {
     const body = await request.json();
     const { topics } = body;
@@ -65,9 +92,10 @@ export async function POST(request: NextRequest) {
       count: sortedSources.length,
     });
   } catch (error) {
-    console.error('Research API error:', error);
+    console.error('[Research API] POST Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch research';
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch research' },
+      { success: false, error: errorMessage, sources: [], count: 0 },
       { status: 500 }
     );
   }
