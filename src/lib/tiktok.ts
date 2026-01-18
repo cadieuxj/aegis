@@ -19,6 +19,17 @@ interface TikTokUserInfo {
   open_id?: string;
 }
 
+export interface TikTokCreatorInfo {
+  creator_avatar_url: string;
+  creator_username: string;
+  creator_nickname: string;
+  privacy_level_options: string[];
+  comment_disabled: boolean;
+  duet_disabled: boolean;
+  stitch_disabled: boolean;
+  max_video_post_duration_sec: number;
+}
+
 export interface TikTokConnectionRecord {
   id?: string;
   open_id: string;
@@ -216,4 +227,31 @@ export async function getValidTikTokAccessToken(): Promise<{
   });
 
   return { accessToken: updated.access_token, openId: updated.open_id, connection: updated };
+}
+
+export async function fetchTikTokCreatorInfo(accessToken: string): Promise<TikTokCreatorInfo | null> {
+  const response = await fetch(`${TIKTOK_API_BASE}/v2/post/publish/creator_info/query/`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    console.error('Failed to fetch TikTok creator info:', response.status);
+    return null;
+  }
+
+  const payload = (await response.json()) as {
+    data?: TikTokCreatorInfo;
+    error?: { code: string; message: string };
+  };
+
+  if (payload.error) {
+    console.error('TikTok creator info error:', payload.error);
+    return null;
+  }
+
+  return payload.data ?? null;
 }
