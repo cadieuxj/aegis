@@ -10,7 +10,12 @@ import {
   VisualStyle,
 } from '@/types';
 import { generateId } from './utils';
-import { searchResearch, getRandomTopic, filterAcademicSources } from './research';
+import {
+  searchResearch,
+  getRandomTopic,
+  filterAcademicSources,
+  persistResearchSummary,
+} from './research';
 import { generateScript, extractVisualThemes } from './scripting';
 import { generateVoiceover, DEFAULT_VOICE } from './audio';
 import { generateVisualSequence, recommendVisualStyle } from './visuals';
@@ -19,6 +24,8 @@ import { supabaseAdmin } from './supabase';
 export type ProgressCallback = (progress: GenerationProgress) => void;
 
 export interface GenerationResult {
+  topic: string;
+  sources: ResearchSource[];
   post: Post;
   script: TikTokScript;
   audioAsset: AudioAsset;
@@ -103,6 +110,8 @@ export async function generateViralContent(
   updateProgress('complete', 100, 'Content generation complete!');
 
   return {
+    topic,
+    sources: academicSources,
     post,
     script,
     audioAsset,
@@ -111,11 +120,14 @@ export async function generateViralContent(
 }
 
 export async function saveGeneratedContent(result: GenerationResult): Promise<void> {
-  const { post, script, audioAsset, visualAssets } = result;
+  const { post, script, audioAsset, visualAssets, topic, sources } = result;
+
+  const researchSummaryId = await persistResearchSummary(topic, sources);
 
   // Save script
-  await supabaseAdmin.from('scripts').insert({
+  const { error: scriptError } = await supabaseAdmin.from('scripts').insert({
     id: script.id,
+    research_summary_id: researchSummaryId,
     title: script.title,
     hook_type: script.hookType,
     sections: script.sections,
@@ -124,9 +136,12 @@ export async function saveGeneratedContent(result: GenerationResult): Promise<vo
     estimated_duration: script.estimatedDuration,
     visual_themes: script.visualThemes,
   });
+  if (scriptError) {
+    throw new Error(`Failed to save script: ${scriptError.message}`);
+  }
 
   // Save audio asset
-  await supabaseAdmin.from('audio_assets').insert({
+  const { error: audioError } = await supabaseAdmin.from('audio_assets').insert({
     id: audioAsset.id,
     script_id: audioAsset.scriptId,
     voice_id: audioAsset.voiceId,
@@ -134,10 +149,13 @@ export async function saveGeneratedContent(result: GenerationResult): Promise<vo
     audio_url: audioAsset.audioUrl,
     duration: audioAsset.duration,
   });
+  if (audioError) {
+    throw new Error(`Failed to save audio asset: ${audioError.message}`);
+  }
 
   // Save visual assets
   for (const visual of visualAssets) {
-    await supabaseAdmin.from('visual_assets').insert({
+    const { error: visualError } = await supabaseAdmin.from('visual_assets').insert({
       id: visual.id,
       script_id: visual.scriptId,
       prompt: visual.prompt,
@@ -146,10 +164,13 @@ export async function saveGeneratedContent(result: GenerationResult): Promise<vo
       sequence: visual.sequence,
       theme: visual.theme,
     });
+    if (visualError) {
+      throw new Error(`Failed to save visual asset: ${visualError.message}`);
+    }
   }
 
   // Save post
-  await supabaseAdmin.from('posts').insert({
+  const { error: postError } = await supabaseAdmin.from('posts').insert({
     id: post.id,
     script_id: post.scriptId,
     status: post.status,
@@ -157,6 +178,9 @@ export async function saveGeneratedContent(result: GenerationResult): Promise<vo
     hook_type: post.hookType,
     visual_style_prompt: post.visualStylePrompt,
   });
+  if (postError) {
+    throw new Error(`Failed to save post: ${postError.message}`);
+  }
 }
 
 export async function loadPost(postId: string): Promise<Post | null> {

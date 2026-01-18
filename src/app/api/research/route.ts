@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { searchResearch, RESEARCH_TOPICS, filterAcademicSources } from '@/lib/research';
+import {
+  searchResearch,
+  RESEARCH_TOPICS,
+  filterAcademicSources,
+  persistResearchSummary,
+} from '@/lib/research';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -29,6 +34,14 @@ export async function GET(request: NextRequest) {
     if (academicOnly && sources.length > 0) {
       sources = filterAcademicSources(sources);
       console.log(`[Research API] ${sources.length} sources after academic filter`);
+    }
+
+    if (sources.length > 0) {
+      try {
+        await persistResearchSummary(searchTopic, sources);
+      } catch (logError) {
+        console.error('[Research API] Failed to log research sources:', logError);
+      }
     }
 
     return NextResponse.json({
@@ -85,6 +98,14 @@ export async function POST(request: NextRequest) {
     const sortedSources = allSources
       .sort((a, b) => b.credibilityScore - a.credibilityScore)
       .slice(0, 20);
+
+    if (sortedSources.length > 0) {
+      try {
+        await persistResearchSummary('multiple topics', sortedSources);
+      } catch (logError) {
+        console.error('[Research API] Failed to log research sources:', logError);
+      }
+    }
 
     return NextResponse.json({
       success: true,

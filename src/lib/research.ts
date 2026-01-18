@@ -1,6 +1,7 @@
 import FirecrawlApp from '@mendable/firecrawl-js';
 import { ResearchSource, ResearchSummary } from '@/types';
 import { generateId, isAcademicSource, calculateCredibilityScore, extractDomain } from './utils';
+import { supabaseAdmin } from './supabase';
 
 const firecrawl = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY! });
 
@@ -226,4 +227,90 @@ export function createResearchSummary(
     potentialHooks,
     createdAt: new Date().toISOString(),
   };
+}
+
+export async function persistResearchSummary(
+  topic: string,
+  sources: ResearchSource[]
+): Promise<string | null> {
+  if (!sources.length) {
+    return null;
+  }
+
+  const uniqueSources = Array.from(
+    new Map(sources.map((source) => [source.url, source])).values()
+  );
+  const urls = uniqueSources.map((source) => source.url);
+
+  const { data: existingSources, error: existingError } = await supabaseAdmin
+    .from('research_sources')
+    .select('id, url')
+    .in('url', urls);
+
+  if (existingError) {
+    throw new Error(`Failed to check research sources: ${existingError.message}`);
+  }
+
+  const existingByUrl = new Map(
+    (existingSources || []).map((row: { id: string; url: string }) => [row.url, row.id])
+  );
+
+  const newSources = uniqueSources.filter((source) => !existingByUrl.has(source.url));
+
+  if (newSources.length > 0) {
+    const insertPayload = newSources.map((source) => ({
+      id: source.id,
+      url: source.url,
+      title: source.title,
+      domain: source.domain,
+      markdown: source.markdown || null,
+      credibility_score: source.credibilityScore,
+      fetched_at: source.fetchedAt,
+    }));
+
+    const { error: insertError } = await supabaseAdmin
+      .from('research_sources')
+      .insert(insertPayload);
+
+    if (insertError) {
+      throw new Error(`Failed to insert research sources: ${insertError.message}`);
+    }
+  }
+
+  const sourceIds = uniqueSources.map(
+    (source) => existingByUrl.get(source.url) || source.id
+  );
+
+  const summaryId = generateId();
+
+  const { error: summaryError } = await supabaseAdmin
+    .from('research_summaries')
+    .insert({
+      id: summaryId,
+      topic,
+      key_findings: [],
+      ethical_implications: [],
+      potential_hooks: [],
+    });
+
+  if (summaryError) {
+    throw new Error(`Failed to insert research summary: ${summaryError.message}`);
+  }
+
+  const linkPayload = sourceIds.map((sourceId) => ({
+    summary_id: summaryId,
+    source_id: sourceId,
+  }));
+
+  if (linkPayload.length > 0) {
+    const { error: linkError } = await supabaseAdmin
+      .from('summary_sources')
+      .insert(linkPayload);
+
+    if (linkError) {
+      throw new Error(`Failed to link research sources: ${linkError.message}`);
+    }
+  }
+
+  return summaryId;
 }
