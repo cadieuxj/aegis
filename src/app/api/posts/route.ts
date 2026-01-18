@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listPosts, loadPost, updatePostContent, updatePostStatus } from '@/lib/engine';
-import type { PostStatus } from '@/types';
+import type { PostStatus, ScriptSection } from '@/types';
 import { logActivity } from '@/lib/activity';
 
 export async function GET(request: NextRequest) {
@@ -72,6 +72,7 @@ export async function PATCH(request: NextRequest) {
       | { id?: string; sections?: unknown; fullText?: string }
       | undefined;
     const visuals = body?.visuals as Array<{ id: string; sequence: number }> | undefined;
+    const sections = parseSections(script?.sections);
 
     if (!postId) {
       return NextResponse.json(
@@ -95,7 +96,7 @@ export async function PATCH(request: NextRequest) {
       await updatePostContent({
         postId,
         scriptId: script?.id,
-        sections: script?.sections,
+        sections,
         fullText: script?.fullText,
         visuals,
       });
@@ -119,4 +120,38 @@ export async function PATCH(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+function parseSections(input: unknown): ScriptSection[] | undefined {
+  if (!Array.isArray(input)) {
+    return undefined;
+  }
+
+  const validTypes = new Set<ScriptSection['type']>(['hook', 'unlock', 'cta']);
+  const result: ScriptSection[] = [];
+
+  for (const item of input) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+
+    const candidate = item as Partial<ScriptSection>;
+    if (
+      typeof candidate.type === 'string' &&
+      validTypes.has(candidate.type as ScriptSection['type']) &&
+      typeof candidate.startTime === 'number' &&
+      typeof candidate.endTime === 'number' &&
+      typeof candidate.text === 'string'
+    ) {
+      result.push({
+        type: candidate.type as ScriptSection['type'],
+        startTime: candidate.startTime,
+        endTime: candidate.endTime,
+        text: candidate.text,
+        speakerNotes: candidate.speakerNotes,
+      });
+    }
+  }
+
+  return result.length > 0 ? result : undefined;
 }
