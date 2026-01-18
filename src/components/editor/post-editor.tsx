@@ -23,7 +23,7 @@ import { Button, MotionButton } from '@/components/ui/button';
 import { Textarea, Label } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { Post, VisualAsset, TikTokScript } from '@/types';
+import { Post, VisualAsset, TikTokScript, ScriptSection } from '@/types';
 
 interface PostEditorProps {
   postId?: string;
@@ -108,7 +108,7 @@ export function PostEditor({ postId }: PostEditorProps) {
 
     setSaving(true);
     try {
-      const sections = [
+      const sections: ScriptSection[] = [
         { type: 'hook', startTime: 0, endTime: 3, text: hookText },
         { type: 'unlock', startTime: 3, endTime: 30, text: unlockText },
         { type: 'cta', startTime: 30, endTime: 45, text: ctaText },
