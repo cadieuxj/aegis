@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { TikTokPanel } from '@/components/dashboard/tiktok-panel';
 
 export default function TikTokPage() {
@@ -9,7 +10,9 @@ export default function TikTokPage() {
           Connect your creator account and manually publish test posts.
         </p>
       </div>
-      <TikTokPanel />
+      <Suspense fallback={<div className="text-sm text-slate-500">Loading TikTok panel...</div>}>
+        <TikTokPanel />
+      </Suspense>
     </div>
   );
 }
