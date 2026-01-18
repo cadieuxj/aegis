@@ -52,6 +52,22 @@ export function buildTikTokAuthUrl(state: string): string {
   return `${TIKTOK_AUTH_BASE}?${params.toString()}`;
 }
 
+interface TikTokTokenResponse {
+  data?: TikTokTokenData;
+  message?: string;
+  error?: string;
+}
+
+function extractTikTokTokenData(payload: TikTokTokenData | TikTokTokenResponse): TikTokTokenData {
+  if ('access_token' in payload) {
+    return payload;
+  }
+  if (payload.data) {
+    return payload.data;
+  }
+  throw new Error(payload.error || payload.message || 'TikTok token response missing data');
+}
+
 export async function exchangeTikTokCodeForToken(code: string): Promise<TikTokTokenData> {
   const clientKey = process.env.TIKTOK_CLIENT_KEY;
   const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
@@ -74,13 +90,13 @@ export async function exchangeTikTokCodeForToken(code: string): Promise<TikTokTo
     body,
   });
 
-  const payload = await response.json() as { data?: TikTokTokenData; message?: string; error?: string } | TikTokTokenData;
+  const payload = await response.json() as TikTokTokenData | TikTokTokenResponse;
   if (!response.ok) {
-    const message = 'data' in payload ? payload.message : (payload as { message?: string }).message;
+    const message = 'access_token' in payload ? undefined : payload.message;
     throw new Error(message || 'Failed to exchange TikTok authorization code');
   }
 
-  return 'data' in payload && payload.data ? payload.data : payload;
+  return extractTikTokTokenData(payload);
 }
 
 export async function refreshTikTokToken(refreshToken: string): Promise<TikTokTokenData> {
@@ -103,13 +119,13 @@ export async function refreshTikTokToken(refreshToken: string): Promise<TikTokTo
     body,
   });
 
-  const payload = await response.json() as { data?: TikTokTokenData; message?: string; error?: string } | TikTokTokenData;
+  const payload = await response.json() as TikTokTokenData | TikTokTokenResponse;
   if (!response.ok) {
-    const message = 'data' in payload ? payload.message : (payload as { message?: string }).message;
+    const message = 'access_token' in payload ? undefined : payload.message;
     throw new Error(message || 'Failed to refresh TikTok token');
   }
 
-  return 'data' in payload && payload.data ? payload.data : payload;
+  return extractTikTokTokenData(payload);
 }
 
 export async function fetchTikTokUserInfo(accessToken: string): Promise<TikTokUserInfo | null> {
