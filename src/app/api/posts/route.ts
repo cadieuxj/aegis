@@ -65,7 +65,12 @@ export async function PATCH(request: NextRequest) {
   let body: Record<string, unknown> | null = null;
   try {
     body = await request.json();
-    const { postId, status, script, visuals } = body;
+    const postId = typeof body?.postId === 'string' ? body.postId : null;
+    const status = body?.status as string | undefined;
+    const script = body?.script as
+      | { id?: string; sections?: unknown; fullText?: string }
+      | undefined;
+    const visuals = body?.visuals as Array<{ id: string; sequence: number }> | undefined;
 
     if (!postId) {
       return NextResponse.json(
