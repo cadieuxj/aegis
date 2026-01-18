@@ -20,6 +20,7 @@ import { generateScript, extractVisualThemes } from './scripting';
 import { generateVoiceover, DEFAULT_VOICE } from './audio';
 import { generateVisualSequence, recommendVisualStyle } from './visuals';
 import { supabaseAdmin } from './supabase';
+import { logActivity } from './activity';
 
 export type ProgressCallback = (progress: GenerationProgress) => void;
 
@@ -181,6 +182,18 @@ export async function saveGeneratedContent(result: GenerationResult): Promise<vo
   if (postError) {
     throw new Error(`Failed to save post: ${postError.message}`);
   }
+
+  await logActivity({
+    eventType: 'content.saved',
+    entityType: 'post',
+    entityId: post.id,
+    metadata: {
+      scriptId: script.id,
+      audioAssetId: audioAsset.id,
+      visualAssetCount: visualAssets.length,
+      researchSummaryId,
+    },
+  });
 }
 
 export async function loadPost(postId: string): Promise<Post | null> {
@@ -200,21 +213,29 @@ export async function loadPost(postId: string): Promise<Post | null> {
     return null;
   }
 
+  const scriptData = Array.isArray(postData.scripts)
+    ? postData.scripts[0]
+    : postData.scripts;
+
+  if (!scriptData) {
+    return null;
+  }
+
   return {
     id: postData.id,
     scriptId: postData.script_id,
     script: {
-      id: postData.scripts.id,
+      id: scriptData.id,
       researchSummaryId: '',
-      title: postData.scripts.title,
-      hookType: postData.scripts.hook_type as HookType,
-      sections: postData.scripts.sections,
-      fullText: postData.scripts.full_text,
-      targetAudience: postData.scripts.target_audience,
-      estimatedDuration: postData.scripts.estimated_duration,
-      visualThemes: postData.scripts.visual_themes,
-      createdAt: postData.scripts.created_at,
-      updatedAt: postData.scripts.updated_at,
+      title: scriptData.title,
+      hookType: scriptData.hook_type as HookType,
+      sections: scriptData.sections,
+      fullText: scriptData.full_text,
+      targetAudience: scriptData.target_audience,
+      estimatedDuration: scriptData.estimated_duration,
+      visualThemes: scriptData.visual_themes,
+      createdAt: scriptData.created_at,
+      updatedAt: scriptData.updated_at,
     },
     audioAsset: postData.audio_assets?.[0]
       ? {
@@ -311,4 +332,84 @@ export async function updatePostStatus(
   }
 
   await supabaseAdmin.from('posts').update(updateData).eq('id', postId);
+
+  await logActivity({
+    eventType: 'post.status_updated',
+    entityType: 'post',
+    entityId: postId,
+    metadata: { status },
+  });
+}
+
+export async function updatePostContent({
+  postId,
+  scriptId,
+  sections,
+  fullText,
+  visuals,
+}: {
+  postId: string;
+  scriptId?: string;
+  sections?: TikTokScript['sections'];
+  fullText?: string;
+  visuals?: Array<{ id: string; sequence: number }>;
+}): Promise<void> {
+  let resolvedScriptId = scriptId;
+
+  if (!resolvedScriptId) {
+    const { data, error } = await supabaseAdmin
+      .from('posts')
+      .select('script_id')
+      .eq('id', postId)
+      .single();
+
+    if (error || !data?.script_id) {
+      throw new Error('Unable to resolve script for post update');
+    }
+
+    resolvedScriptId = data.script_id;
+  }
+
+  const scriptUpdates: Record<string, unknown> = {};
+  if (sections) {
+    scriptUpdates.sections = sections;
+  }
+  if (fullText) {
+    scriptUpdates.full_text = fullText;
+  }
+
+  if (Object.keys(scriptUpdates).length > 0) {
+    const { error: scriptError } = await supabaseAdmin
+      .from('scripts')
+      .update(scriptUpdates)
+      .eq('id', resolvedScriptId);
+
+    if (scriptError) {
+      throw new Error(`Failed to update script: ${scriptError.message}`);
+    }
+  }
+
+  if (visuals && visuals.length > 0) {
+    for (const visual of visuals) {
+      const { error: visualError } = await supabaseAdmin
+        .from('visual_assets')
+        .update({ sequence: visual.sequence })
+        .eq('id', visual.id);
+
+      if (visualError) {
+        throw new Error(`Failed to update visual order: ${visualError.message}`);
+      }
+    }
+  }
+
+  await logActivity({
+    eventType: 'post.updated',
+    entityType: 'post',
+    entityId: postId,
+    metadata: {
+      scriptId: resolvedScriptId,
+      sectionsUpdated: Boolean(sections),
+      visualsUpdated: visuals ? visuals.length : 0,
+    },
+  });
 }

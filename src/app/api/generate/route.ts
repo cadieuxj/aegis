@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateViralContent, saveGeneratedContent } from '@/lib/engine';
+import { logActivity } from '@/lib/activity';
 import { GenerationConfig } from '@/types';
 
 export async function POST(request: NextRequest) {
@@ -19,6 +20,18 @@ export async function POST(request: NextRequest) {
     if (body.save !== false) {
       await saveGeneratedContent(result);
     }
+
+    await logActivity({
+      eventType: body.save === false ? 'content.generated' : 'content.generated_saved',
+      entityType: 'post',
+      entityId: result.post.id,
+      metadata: {
+        topic: result.topic,
+        hookType: result.post.hookType,
+        visualStyle: result.post.visualStylePrompt,
+        saved: body.save !== false,
+      },
+    });
 
     return NextResponse.json({
       success: true,
@@ -43,10 +56,17 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Generate API error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to generate content';
+    await logActivity({
+      eventType: 'content.generated',
+      status: 'error',
+      message,
+      metadata: { save: true },
+    });
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to generate content',
+        error: message,
       },
       { status: 500 }
     );

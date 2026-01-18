@@ -5,6 +5,7 @@ import {
   filterAcademicSources,
   persistResearchSummary,
 } from '@/lib/research';
+import { logActivity } from '@/lib/activity';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -44,6 +45,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    await logActivity({
+      eventType: 'research.search',
+      entityType: 'research_summary',
+      metadata: {
+        topic: searchTopic,
+        count: sources.length,
+        academicOnly,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       topic: searchTopic,
@@ -53,6 +64,16 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('[Research API] Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch research';
+    await logActivity({
+      eventType: 'research.search',
+      status: 'error',
+      message: errorMessage,
+      metadata: {
+        topic,
+        academicOnly,
+      },
+    });
+
     return NextResponse.json(
       { success: false, error: errorMessage, topic: null, sources: [], count: 0 },
       { status: 500 }
@@ -71,9 +92,12 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  let topicCount = 0;
+
   try {
     const body = await request.json();
     const { topics } = body;
+    topicCount = Array.isArray(topics) ? topics.length : 0;
 
     if (!topics || !Array.isArray(topics)) {
       return NextResponse.json(
@@ -107,6 +131,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    await logActivity({
+      eventType: 'research.search_batch',
+      entityType: 'research_summary',
+      metadata: {
+        topicCount: topics.length,
+        count: sortedSources.length,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       sources: sortedSources,
@@ -115,6 +148,15 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[Research API] POST Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch research';
+    await logActivity({
+      eventType: 'research.search_batch',
+      status: 'error',
+      message: errorMessage,
+      metadata: {
+        topicCount,
+      },
+    });
+
     return NextResponse.json(
       { success: false, error: errorMessage, sources: [], count: 0 },
       { status: 500 }

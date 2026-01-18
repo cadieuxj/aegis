@@ -2,6 +2,7 @@ import FirecrawlApp from '@mendable/firecrawl-js';
 import { ResearchSource, ResearchSummary } from '@/types';
 import { generateId, isAcademicSource, calculateCredibilityScore, extractDomain } from './utils';
 import { supabaseAdmin } from './supabase';
+import { logActivity } from './activity';
 
 const firecrawl = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY! });
 
@@ -311,6 +312,16 @@ export async function persistResearchSummary(
       throw new Error(`Failed to link research sources: ${linkError.message}`);
     }
   }
+
+  await logActivity({
+    eventType: 'research.persisted',
+    entityType: 'research_summary',
+    entityId: summaryId,
+    metadata: {
+      topic,
+      sources: sourceIds.length,
+    },
+  });
 
   return summaryId;
 }

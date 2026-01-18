@@ -112,12 +112,26 @@ CREATE TABLE iteration_recommendations (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Activity Logs Table
+CREATE TABLE activity_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  event_type TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id UUID,
+  status TEXT NOT NULL DEFAULT 'success',
+  message TEXT,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Create indexes for performance
 CREATE INDEX idx_posts_status ON posts(status);
 CREATE INDEX idx_posts_created_at ON posts(created_at DESC);
 CREATE INDEX idx_engagement_metrics_post_id ON engagement_metrics(post_id);
 CREATE INDEX idx_scripts_hook_type ON scripts(hook_type);
 CREATE INDEX idx_research_sources_credibility ON research_sources(credibility_score DESC);
+CREATE INDEX idx_activity_logs_event_type ON activity_logs(event_type);
+CREATE INDEX idx_activity_logs_created_at ON activity_logs(created_at DESC);
 
 -- Enable Row Level Security
 ALTER TABLE research_sources ENABLE ROW LEVEL SECURITY;
@@ -128,6 +142,7 @@ ALTER TABLE visual_assets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE engagement_metrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE iteration_recommendations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
 
 -- Create policies (allow all for now, customize based on auth needs)
 CREATE POLICY "Allow all" ON research_sources FOR ALL USING (true);
@@ -138,6 +153,7 @@ CREATE POLICY "Allow all" ON visual_assets FOR ALL USING (true);
 CREATE POLICY "Allow all" ON posts FOR ALL USING (true);
 CREATE POLICY "Allow all" ON engagement_metrics FOR ALL USING (true);
 CREATE POLICY "Allow all" ON iteration_recommendations FOR ALL USING (true);
+CREATE POLICY "Allow all" ON activity_logs FOR ALL USING (true);
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

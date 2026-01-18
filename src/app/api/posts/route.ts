@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listPosts, loadPost, updatePostStatus } from '@/lib/engine';
+import { listPosts, loadPost, updatePostContent, updatePostStatus } from '@/lib/engine';
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,20 +38,39 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { postId, status } = body;
+    const { postId, status, script, visuals } = body;
 
-    if (!postId || !status) {
+    if (!postId) {
       return NextResponse.json(
-        { success: false, error: 'postId and status required' },
+        { success: false, error: 'postId required' },
         { status: 400 }
       );
     }
 
-    await updatePostStatus(postId, status);
+    if (!status && !script && !visuals) {
+      return NextResponse.json(
+        { success: false, error: 'No updates provided' },
+        { status: 400 }
+      );
+    }
+
+    if (status) {
+      await updatePostStatus(postId, status);
+    }
+
+    if (script || visuals) {
+      await updatePostContent({
+        postId,
+        scriptId: script?.id,
+        sections: script?.sections,
+        fullText: script?.fullText,
+        visuals,
+      });
+    }
 
     return NextResponse.json({
       success: true,
-      message: `Post status updated to ${status}`,
+      message: status ? `Post status updated to ${status}` : 'Post updated',
     });
   } catch (error) {
     console.error('Posts API error:', error);

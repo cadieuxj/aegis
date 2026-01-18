@@ -12,6 +12,7 @@ const TABLES = [
   'engagement_metrics',
   'iteration_recommendations',
   'tiktok_connections',
+  'activity_logs',
 ];
 
 export async function GET() {

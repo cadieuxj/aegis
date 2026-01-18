@@ -54,7 +54,7 @@ export function PostEditor({ postId }: PostEditorProps) {
     if (postId) {
       fetchPost(postId);
     } else {
-      setLoading(false);
+      fetchLatestPost();
     }
   }, [postId]);
 
@@ -69,6 +69,22 @@ export function PostEditor({ postId }: PostEditorProps) {
       }
     } catch (error) {
       console.error('Error fetching post:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchLatestPost = async () => {
+    try {
+      const response = await fetch('/api/posts?limit=1');
+      const data = await response.json();
+
+      if (data.success && data.posts?.length > 0) {
+        await fetchPost(data.posts[0].id);
+        return;
+      }
+    } catch (error) {
+      console.error('Error fetching latest post:', error);
     } finally {
       setLoading(false);
     }
@@ -92,8 +108,46 @@ export function PostEditor({ postId }: PostEditorProps) {
 
     setSaving(true);
     try {
-      // Save logic here
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const sections = [
+        { type: 'hook', startTime: 0, endTime: 3, text: hookText },
+        { type: 'unlock', startTime: 3, endTime: 30, text: unlockText },
+        { type: 'cta', startTime: 30, endTime: 45, text: ctaText },
+      ];
+      const fullText = sections.map((s) => s.text).join(' ');
+
+      const response = await fetch('/api/posts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postId: post.id,
+          script: {
+            id: post.scriptId,
+            sections,
+            fullText,
+          },
+          visuals: selectedVisuals.map((visual, index) => ({
+            id: visual.id,
+            sequence: index,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to save post');
+      }
+
+      setPost({
+        ...post,
+        script: post.script
+          ? {
+              ...post.script,
+              sections,
+              fullText,
+            }
+          : post.script,
+        visualAssets: selectedVisuals,
+      });
       setIsEditing(false);
     } catch (error) {
       console.error('Error saving:', error);
