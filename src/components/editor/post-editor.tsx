@@ -87,8 +87,15 @@ export function PostEditor({ postId }: PostEditorProps) {
   const fetchLatestPost = async () => {
     setError(null);
     try {
-      const response = await fetch('/api/posts?limit=1');
-      const data = await response.json();
+      // Try to fetch draft posts first (unpublished posts)
+      let response = await fetch('/api/posts?status=draft&limit=1');
+      let data = await response.json();
+
+      // If no draft posts, try fetching all posts
+      if (!data.posts?.length) {
+        response = await fetch('/api/posts?limit=1');
+        data = await response.json();
+      }
 
       if (!response.ok) {
         setError(data.error || 'Failed to load posts');
