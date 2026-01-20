@@ -201,9 +201,11 @@ export async function loadPost(postId: string): Promise<Post | null> {
     .from('posts')
     .select(`
       *,
-      scripts (*),
-      audio_assets (*),
-      visual_assets (*),
+      scripts (
+        *,
+        audio_assets (*),
+        visual_assets (*)
+      ),
       engagement_metrics (*)
     `)
     .eq('id', postId)
@@ -246,6 +248,9 @@ export async function loadPost(postId: string): Promise<Post | null> {
     resolvedScript = scriptRow;
   }
 
+  const audioAssets = resolvedScript.audio_assets || [];
+  const visualAssets = resolvedScript.visual_assets || [];
+
   const loadedPost: Post = {
     id: postData.id,
     scriptId: postData.script_id,
@@ -262,18 +267,18 @@ export async function loadPost(postId: string): Promise<Post | null> {
       createdAt: resolvedScript.created_at,
       updatedAt: resolvedScript.updated_at,
     },
-    audioAsset: postData.audio_assets?.[0]
+    audioAsset: audioAssets[0]
       ? {
-          id: postData.audio_assets[0].id,
-          scriptId: postData.audio_assets[0].script_id,
-          voiceId: postData.audio_assets[0].voice_id,
-          voiceName: postData.audio_assets[0].voice_name,
-          audioUrl: postData.audio_assets[0].audio_url,
-          duration: postData.audio_assets[0].duration,
-          createdAt: postData.audio_assets[0].created_at,
+          id: audioAssets[0].id,
+          scriptId: audioAssets[0].script_id,
+          voiceId: audioAssets[0].voice_id,
+          voiceName: audioAssets[0].voice_name,
+          audioUrl: audioAssets[0].audio_url,
+          duration: audioAssets[0].duration,
+          createdAt: audioAssets[0].created_at,
         }
       : undefined,
-    visualAssets: (postData.visual_assets || []).map((v: Record<string, unknown>) => ({
+    visualAssets: visualAssets.map((v: Record<string, unknown>) => ({
       id: v.id,
       scriptId: v.script_id,
       prompt: v.prompt,
