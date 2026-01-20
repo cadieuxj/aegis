@@ -87,7 +87,7 @@ export function PostEditor({ postId }: PostEditorProps) {
   const fetchLatestPost = async () => {
     setError(null);
     try {
-      const response = await fetch('/api/posts?limit=1');
+      const response = await fetch('/api/posts?limit=20');
       const data = await response.json();
 
       if (!response.ok) {
@@ -96,10 +96,21 @@ export function PostEditor({ postId }: PostEditorProps) {
       }
 
       if (data.success && data.posts?.length > 0) {
-        await fetchPost(data.posts[0].id);
+        const latestEditable = (data.posts as Post[]).find(
+          (candidate) => candidate.status !== 'published' && candidate.status !== 'archived'
+        );
+
+        if (latestEditable) {
+          await fetchPost(latestEditable.id);
+          return;
+        }
+
+        setPost(null);
+        setError('No unpublished posts available');
         return;
       }
 
+      setPost(null);
       setError('No posts available');
     } catch (error) {
       console.error('Error fetching latest post:', error);
